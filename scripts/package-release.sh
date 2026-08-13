@@ -1,0 +1,433 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 <platform> <runtime-id> <version> [output-dir] [--payload-root <path>]" >&2
+  echo "Platforms: ubuntu, nixos, macos, windows" >&2
+}
+
+if [ "$#" -lt 3 ] || [ "$#" -gt 6 ]; then
+  usage
+  exit 2
+fi
+
+platform="$1"
+rid="$2"
+version="$3"
+shift 3
+output_dir="artifacts"
+payload_root="${AGENTUP_PACKAGE_PAYLOAD_ROOT:-}"
+configuration="${CONFIGURATION:-Release}"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+stage="$root/artifacts/stage/$platform-$rid"
+
+if [ "$#" -gt 0 ] && [ "$1" != "--payload-root" ]; then
+  output_dir="$1"
+  shift
+fi
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -ne 2 ] || [ "$1" != "--payload-root" ]; then
+    usage
+    exit 2
+  fi
+
+  payload_root="$2"
+  shift 2
+fi
+
+if [ "$#" -ne 0 ]; then
+  usage
+  exit 2
+fi
+
+ensure_wix_cli() {
+  export DOTNET_CLI_HOME="${DOTNET_CLI_HOME:-$root/.dotnet}"
+  mkdir -p "$DOTNET_CLI_HOME" "$root/artifacts/tools/windows/bin" "$root/artifacts/tools/windows/home"
+  dotnet tool restore --tool-manifest "$root/packaging/windows/dotnet-tools.json"
+
+  dotnet_cli_home_cmd="$DOTNET_CLI_HOME"
+  root_cmd="$root"
+  home_cmd="$root/artifacts/tools/windows/home"
+  wix_command="$root/artifacts/tools/windows/bin/wix"
+  wix_command_cmd="$root/artifacts/tools/windows/bin/wix.cmd"
+  if command -v cygpath >/dev/null 2>&1; then
+    dotnet_cli_home_cmd="$(cygpath -w "$DOTNET_CLI_HOME")"
+    root_cmd="$(cygpath -w "$root")"
+    home_cmd="$(cygpath -w "$root/artifacts/tools/windows/home")"
+    wix_command_cmd="$(cygpath -w "$root/artifacts/tools/windows/bin/wix.cmd")"
+  fi
+
+cat > "$root/artifacts/tools/windows/bin/wix" <<WIXSHIM
+#!/usr/bin/env bash
+set -euo pipefail
+export DOTNET_CLI_HOME="$DOTNET_CLI_HOME"
+export HOME="$root/artifacts/tools/windows/home"
+cd "$root/packaging/windows"
+exec dotnet tool run wix -- "\$@"
+WIXSHIM
+
+cat > "$root/artifacts/tools/windows/bin/wix.cmd" <<WIXCMDSHIM
+@echo off
+set DOTNET_CLI_HOME=$dotnet_cli_home_cmd
+set HOME=$home_cmd
+cd /d "$root_cmd\packaging\windows"
+dotnet tool run wix -- %*
+WIXCMDSHIM
+  chmod +x "$root/artifacts/tools/windows/bin/wix"
+  export PATH="$root/artifacts/tools/windows/bin:$PATH"
+  if [ "${OS:-}" = "Windows_NT" ]; then
+    export AGENTUP_WIX_COMMAND="$wix_command_cmd"
+  else
+    export AGENTUP_WIX_COMMAND="$wix_command"
+  fi
+}
+
+if [ "$platform" = "ubuntu" ] || [ "$platform" = "macos" ] || [ "$platform" = "windows" ]; then
+  if [ "$platform" = "windows" ]; then
+    ensure_wix_cli
+  fi
+
+  packaging_command=("$root/AgentUp.Packaging/bin/$configuration/net10.0/AgentUp.Packaging")
+  if [ -n "${AGENTUP_PACKAGING_COMMAND:-}" ]; then
+    packaging_command=("$AGENTUP_PACKAGING_COMMAND")
+  elif [ ! -x "${packaging_command[0]}" ]; then
+    packaging_command=(dotnet run --project "$root/AgentUp.Packaging/AgentUp.Packaging.csproj" --configuration "$configuration" --)
+  fi
+
+  package_args=(package "$platform" "$rid" "$version" "$output_dir")
+  if [ -n "$payload_root" ]; then
+    package_args+=(--payload-root "$payload_root")
+  fi
+
+  export AGENTUP_REPOSITORY_ROOT="$root"
+  "${packaging_command[@]}" "${package_args[@]}"
+  exit 0
+fi
+
+rm -rf "$stage"
+mkdir -p "$stage/desktop" "$stage/server" "$stage/cli" "$stage/installer" "$stage/tray" "$root/$output_dir"
+
+if [ -n "$payload_root" ]; then
+  cp -a "$payload_root/desktop/." "$stage/desktop/"
+  cp -a "$payload_root/server/." "$stage/server/"
+  cp -a "$payload_root/cli/." "$stage/cli/"
+  cp -a "$payload_root/tray/." "$stage/tray/"
+  if [ -d "$payload_root/installer" ]; then
+    cp -a "$payload_root/installer/." "$stage/installer/"
+  fi
+else
+  dotnet restore "$root/AgentUp.InstallerApp/AgentUp.InstallerApp.csproj" --runtime "$rid"
+  dotnet publish "$root/AgentUp.InstallerApp/AgentUp.InstallerApp.csproj" \
+    --configuration "$configuration" \
+    --runtime "$rid" \
+    --self-contained true \
+    -p:PublishSingleFile=false \
+    -p:Version="$version" \
+    -o "$stage/installer"
+
+  dotnet restore "$root/AgentUp.Desktop/AgentUp.Desktop.csproj" --runtime "$rid"
+  dotnet publish "$root/AgentUp.Desktop/AgentUp.Desktop.csproj" \
+    --configuration "$configuration" \
+    --runtime "$rid" \
+    --self-contained true \
+    -p:PublishSingleFile=false \
+    -p:Version="$version" \
+    -o "$stage/desktop"
+
+  dotnet restore "$root/AgentUp.Server/AgentUp.Server.csproj" --runtime "$rid"
+  dotnet publish "$root/AgentUp.Server/AgentUp.Server.csproj" \
+    --configuration "$configuration" \
+    --runtime "$rid" \
+    --self-contained true \
+    -p:PublishSingleFile=false \
+    -p:Version="$version" \
+    -o "$stage/server"
+
+  dotnet restore "$root/AgentUp.CLI/AgentUp.CLI.csproj" --runtime "$rid"
+  dotnet publish "$root/AgentUp.CLI/AgentUp.CLI.csproj" \
+    --configuration "$configuration" \
+    --runtime "$rid" \
+    --self-contained true \
+    -p:PublishSingleFile=false \
+    -p:Version="$version" \
+    -o "$stage/cli"
+
+  dotnet restore "$root/AgentUp.Tray/AgentUp.Tray.csproj" --runtime "$rid"
+  dotnet publish "$root/AgentUp.Tray/AgentUp.Tray.csproj" \
+    --configuration "$configuration" \
+    --runtime "$rid" \
+    --self-contained true \
+    -p:PublishSingleFile=false \
+    -p:Version="$version" \
+    -o "$stage/tray"
+fi
+
+case "$platform" in
+  nixos)
+    pkgs_root="$stage/nixos-pkgs"
+    mkdir -p "$pkgs_root/package/opt/agent-up"
+    cp -a "$stage/desktop" "$pkgs_root/package/opt/agent-up/desktop"
+    cp -a "$stage/server" "$pkgs_root/package/opt/agent-up/server"
+    cp -a "$stage/cli" "$pkgs_root/package/opt/agent-up/cli"
+    cp -a "$stage/tray" "$pkgs_root/package/opt/agent-up/tray"
+    cp -a "$stage/installer" "$pkgs_root/package/opt/agent-up/installer"
+    cp -a "$root/media/logo.png" "$pkgs_root/package/opt/agent-up/logo.png"
+    cat > "$pkgs_root/flake.nix" <<'NIX'
+{
+  description = "Agent-Up package set";
+
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs = { self, nixpkgs }:
+    let
+      systems = [ "x86_64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      packageFor = pkgs: pkgs.stdenv.mkDerivation {
+        pname = "agent-up";
+        version = "@AGENT_UP_VERSION@";
+        src = ./package;
+        nativeBuildInputs = [
+          pkgs.autoPatchelfHook
+          pkgs.makeWrapper
+        ];
+        autoPatchelfIgnoreMissingDeps = [
+          "liblttng-ust.so.0"
+        ];
+        buildInputs = [
+          pkgs.fontconfig.lib
+          pkgs.freetype
+          pkgs.glib
+          pkgs.gtk3
+          pkgs.icu
+          pkgs.libGL
+          pkgs.libice
+          pkgs.libsm
+          pkgs.libx11
+          pkgs.lttng-ust
+          pkgs.openssl
+          pkgs.stdenv.cc.cc.lib
+          pkgs.webkitgtk_4_1
+          pkgs.zlib
+        ];
+        dontConfigure = true;
+        dontBuild = true;
+        installPhase = ''
+          runHook preInstall
+          mkdir -p $out
+          cp -R opt $out/
+          chmod +x $out/opt/agent-up/desktop/AgentUp.Desktop
+          chmod +x $out/opt/agent-up/server/AgentUp.Server
+          chmod +x $out/opt/agent-up/cli/AgentUp.CLI
+          chmod +x $out/opt/agent-up/tray/AgentUp.Tray
+          chmod +x $out/opt/agent-up/installer/AgentUp.InstallerApp
+          mkdir -p $out/bin
+          ln -s $out/opt/agent-up/desktop/AgentUp.Desktop $out/bin/agent-up-desktop
+          ln -s $out/opt/agent-up/server/AgentUp.Server $out/bin/agent-up-server
+          ln -s $out/opt/agent-up/cli/AgentUp.CLI $out/bin/agent-up
+          ln -s $out/opt/agent-up/tray/AgentUp.Tray $out/bin/agent-up-tray
+          ln -s $out/opt/agent-up/installer/AgentUp.InstallerApp $out/bin/agent-up-installer
+          runHook postInstall
+        '';
+        postFixup = ''
+          runtime_libs="${pkgs.lib.makeLibraryPath [
+            pkgs.fontconfig.lib
+            pkgs.freetype
+            pkgs.glib
+            pkgs.gtk3
+            pkgs.icu
+            pkgs.libGL
+            pkgs.libice
+            pkgs.libsm
+            pkgs.libx11
+            pkgs.lttng-ust
+            pkgs.openssl
+            pkgs.stdenv.cc.cc.lib
+            pkgs.webkitgtk_4_1
+            pkgs.zlib
+          ]}"
+
+          wrapProgram $out/opt/agent-up/desktop/AgentUp.Desktop \
+            --prefix LD_LIBRARY_PATH : "$runtime_libs"
+          wrapProgram $out/opt/agent-up/server/AgentUp.Server \
+            --prefix LD_LIBRARY_PATH : "$runtime_libs"
+          wrapProgram $out/opt/agent-up/cli/AgentUp.CLI \
+            --prefix LD_LIBRARY_PATH : "$runtime_libs"
+          wrapProgram $out/opt/agent-up/tray/AgentUp.Tray \
+            --prefix LD_LIBRARY_PATH : "$runtime_libs"
+          wrapProgram $out/opt/agent-up/installer/AgentUp.InstallerApp \
+            --prefix LD_LIBRARY_PATH : "$runtime_libs" \
+            --set AGENTUP_INSTALLER_NIXOS_LOOKUP_ONLY 1
+        '';
+      };
+    in
+    {
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          agent-up = packageFor pkgs;
+          default = self.packages.${system}.agent-up;
+        });
+
+      overlays.default = final: prev: {
+        agent-up = self.packages.${final.system}.agent-up;
+      };
+
+      nixosModules.default = { config, lib, pkgs, ... }:
+        let
+          cfg = config.services.agent-up;
+          package = self.packages.${pkgs.system}.agent-up;
+          capabilityInventory = builtins.toJSON (
+            lib.mapAttrsToList (id: versions: { inherit id versions; }) cfg.capabilities
+          );
+        in
+        {
+          options.services.agent-up = {
+            enable = lib.mkEnableOption "agent-up server";
+            port = lib.mkOption {
+              type = lib.types.port;
+              default = 5000;
+              description = "Loopback port for the Agent-Up server.";
+            };
+            dataDir = lib.mkOption {
+              type = lib.types.str;
+              default = "/var/lib/agent-up";
+              description = "Directory used by Agent-Up for persistent server data.";
+            };
+            capabilities = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+              default = {};
+              example = { dotnet = [ "10.0.x" ]; docker = [ "27.x" ]; };
+              description = "Declarative Agent-Up capability versions made available on NixOS.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            environment.systemPackages = [ package ];
+            environment.etc."agent-up/capabilities.json".text = capabilityInventory;
+            systemd.services.agent-up-server = {
+              description = "Agent-Up Server";
+              wantedBy = [ "multi-user.target" ];
+              after = [ "network.target" ];
+              environment = {
+                ASPNETCORE_URLS = "http://127.0.0.1:${toString cfg.port}";
+                ASPNETCORE_CONTENTROOT = "${package}/opt/agent-up/server";
+                DOTNET_CONTENTROOT = "${package}/opt/agent-up/server";
+                DOTNET_BUNDLE_EXTRACT_BASE_DIR = "/var/cache/agent-up";
+                Storage__DataDirectory = cfg.dataDir;
+                AGENTUP_CAPABILITY_INVENTORY_PATH = "/etc/agent-up/capabilities.json";
+              };
+              serviceConfig = {
+                ExecStart = "${package}/bin/agent-up-server --urls http://127.0.0.1:${toString cfg.port}";
+                WorkingDirectory = "${package}/opt/agent-up/server";
+                Restart = "on-failure";
+                RestartSec = 5;
+                CacheDirectory = "agent-up";
+                StateDirectory = "agent-up";
+              };
+            };
+          };
+        };
+
+      homeManagerModules.default = { config, lib, pkgs, ... }:
+        let
+          cfg = config.programs.agent-up;
+          package = self.packages.${pkgs.system}.agent-up;
+          capabilityInventory = builtins.toJSON (
+            lib.mapAttrsToList (id: versions: { inherit id versions; }) cfg.capabilities
+          );
+        in
+        {
+          options.programs.agent-up = {
+            enable = lib.mkEnableOption "agent-up desktop";
+            capabilities = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+              default = {};
+              example = { dotnet = [ "10.0.x" ]; docker = [ "27.x" ]; };
+              description = "Declarative Agent-Up capability versions made available through Home Manager.";
+            };
+            server = {
+              enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Whether to run the Agent-Up server as a Home Manager user service.";
+              };
+              port = lib.mkOption {
+                type = lib.types.port;
+                default = 5000;
+                description = "Loopback port for the Agent-Up server user service.";
+              };
+              dataDir = lib.mkOption {
+                type = lib.types.str;
+                default = "${config.xdg.stateHome}/agent-up";
+                description = "Directory used by Agent-Up for persistent user server data.";
+              };
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            home.packages = [ package ];
+            home.file.".local/share/icons/hicolor/256x256/apps/agent-up.png".source =
+              "${package}/opt/agent-up/logo.png";
+            home.file.".config/agent-up/capabilities.json".text = capabilityInventory;
+            xdg.desktopEntries.agent-up = {
+              name = "Agent Up";
+              exec = "agent-up-desktop";
+              icon = "agent-up";
+              terminal = false;
+              categories = [ "Utility" ];
+            };
+            xdg.desktopEntries.agent-up-installer = {
+              name = "Agent Up Installer";
+              exec = "agent-up-installer";
+              icon = "agent-up";
+              terminal = false;
+              categories = [ "Utility" ];
+            };
+            xdg.configFile."autostart/agent-up-tray.desktop".text = ''
+              [Desktop Entry]
+              Type=Application
+              Name=Agent Up Tray
+              Exec=${package}/bin/agent-up-tray
+              Icon=agent-up
+              Terminal=false
+              X-GNOME-Autostart-enabled=true
+            '';
+            systemd.user.services.agent-up-server = lib.mkIf cfg.server.enable {
+              Unit = {
+                Description = "Agent-Up Server";
+                After = [ "network.target" ];
+              };
+              Service = {
+                ExecStart = "${package}/bin/agent-up-server --urls http://127.0.0.1:${toString cfg.server.port}";
+                WorkingDirectory = "${package}/opt/agent-up/server";
+                Restart = "on-failure";
+                RestartSec = 5;
+                Environment = [
+                  "ASPNETCORE_URLS=http://127.0.0.1:${toString cfg.server.port}"
+                  "ASPNETCORE_CONTENTROOT=${package}/opt/agent-up/server"
+                  "DOTNET_CONTENTROOT=${package}/opt/agent-up/server"
+                  "DOTNET_BUNDLE_EXTRACT_BASE_DIR=${config.xdg.cacheHome}/agent-up"
+                  "Storage__DataDirectory=${cfg.server.dataDir}"
+                  "AGENTUP_CAPABILITY_INVENTORY_PATH=${config.xdg.configHome}/agent-up/capabilities.json"
+                ];
+              };
+              Install.WantedBy = [ "default.target" ];
+            };
+          };
+        };
+    };
+}
+NIX
+    sed -i.bak "s|@AGENT_UP_VERSION@|${version#v}|g" "$pkgs_root/flake.nix"
+    rm -f "$pkgs_root/flake.nix.bak"
+    nix --extra-experimental-features "nix-command flakes" flake lock "path:$pkgs_root"
+    tar -C "$pkgs_root" -czf "$root/$output_dir/agent-up-nixos-pkgs.tar.gz" .
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

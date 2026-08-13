@@ -1,0 +1,11 @@
+.idea/
+node_modules
+artifacts/
+release-artifacts/
+**/obj/**
+**/bin/**
+*DotSettings.user
+.env
+.env.*
+!.env.example
+tmp/

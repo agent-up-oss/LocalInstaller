@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <RepositoryUrl>https://github.com/agent-up-oss/LocalInstaller</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <LocalInstallerVersion>1.0.0</LocalInstallerVersion>
+  </PropertyGroup>
+</Project>
