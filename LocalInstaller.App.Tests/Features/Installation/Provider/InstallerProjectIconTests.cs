@@ -22,7 +22,7 @@ public class InstallerProjectIconTests
         var directory = TestContext.CurrentContext.TestDirectory;
         while (!string.IsNullOrWhiteSpace(directory))
         {
-            if (File.Exists(Path.Join(directory, "agent-up.sln")))
+            if (File.Exists(Path.Join(directory, "localinstaller.sln")))
                 return directory;
 
             var parent = Directory.GetParent(directory)?.FullName;

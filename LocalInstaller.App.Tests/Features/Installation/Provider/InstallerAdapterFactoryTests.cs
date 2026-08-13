@@ -197,7 +197,7 @@ public class InstallerAdapterFactoryTests
         var directory = new DirectoryInfo(startDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Join(directory.FullName, "agent-up.sln")))
+            if (File.Exists(Path.Join(directory.FullName, "localinstaller.sln")))
                 return directory.FullName;
 
             directory = directory.Parent;
