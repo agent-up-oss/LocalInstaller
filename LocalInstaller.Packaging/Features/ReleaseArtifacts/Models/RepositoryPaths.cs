@@ -8,7 +8,7 @@ public static class RepositoryPaths
     {
         var configuredRoot = Environment.GetEnvironmentVariable("LOCALINSTALLER_REPOSITORY_ROOT");
         if (!string.IsNullOrWhiteSpace(configuredRoot))
-            return FindRepositoryRoot(configuredRoot);
+            return PackagePathValidator.RequireFullyQualifiedPath(configuredRoot, "LOCALINSTALLER_REPOSITORY_ROOT");
 
         try
         {

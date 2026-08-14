@@ -13,8 +13,8 @@ public class RepositoryPathsTests
 
         try
         {
-            Environment.SetEnvironmentVariable("LOCALINSTALLER_REPOSITORY_ROOT", Path.Join(root, "nested"));
-            Directory.CreateDirectory(Path.Join(root, "nested"));
+            File.Delete(Path.Join(root, "localinstaller.sln"));
+            Environment.SetEnvironmentVariable("LOCALINSTALLER_REPOSITORY_ROOT", root);
 
             Assert.That(RepositoryPaths.FindRepositoryRoot(), Is.EqualTo(root));
         }

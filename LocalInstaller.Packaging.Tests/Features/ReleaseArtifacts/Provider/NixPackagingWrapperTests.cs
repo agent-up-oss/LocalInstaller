@@ -59,6 +59,8 @@ public class NixPackagingWrapperTests
         Assert.That(text, Does.Contain("[ \"$platform\" = \"ubuntu\" ] || [ \"$platform\" = \"macos\" ] || [ \"$platform\" = \"windows\" ]"));
         Assert.That(text, Does.Contain("ensure_wix_cli"));
         Assert.That(text, Does.Contain("AgentUp.Packaging/AgentUp.Packaging.csproj"));
+        Assert.That(text, Does.Contain("export LOCALINSTALLER_REPOSITORY_ROOT=\"$root\""));
+        Assert.That(text, Does.Not.Contain("AGENTUP_REPOSITORY_ROOT"));
         Assert.That(text, Does.Not.Contain("create_windows_installer"));
         Assert.That(text, Does.Not.Contain("UseWindowsForms"));
         Assert.That(text, Does.Not.Contain("payload.zip"));
