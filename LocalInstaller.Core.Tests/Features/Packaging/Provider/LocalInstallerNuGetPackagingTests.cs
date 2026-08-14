@@ -186,7 +186,7 @@ public class LocalInstallerNuGetPackagingTests
     }
 
     [Test]
-    public void ConsumingProject_canRestoreAndBuildAgainstAllFourPackagesViaLocalNuGetSource()
+    public void ConsumingProject_canRestoreBuildAndRunAgainstAllFourPackagesViaLocalNuGetSource()
     {
         var consumerDir = Path.Join(_workDir, "consumer");
         Directory.CreateDirectory(consumerDir);
@@ -223,18 +223,24 @@ public class LocalInstallerNuGetPackagingTests
             </Project>
             """);
 
-        // Each using / typeof() proves the type is accessible from the packed assembly
+        // Loading and printing each assembly proves the package is usable at runtime, not merely at compile time.
         File.WriteAllText(Path.Join(consumerDir, "Program.cs"),
             """
             using LocalInstaller.App.Features.Capabilities.Models;
             using LocalInstaller.Core.Features.Installation.Models;
+            using LocalInstaller.Core.Shared.Models;
             using LocalInstaller.Packaging.Features.ReleaseArtifacts.DTOs;
             using LocalInstaller.Smoke.Features.SmokeRuns.DTOs;
 
-            _ = typeof(ProductManifest);       // LocalInstaller.Core
-            _ = typeof(CapabilityArtifact);    // LocalInstaller.App
-            _ = typeof(SmokeProductManifest);  // LocalInstaller.Smoke
-            _ = typeof(PackageProductManifest);// LocalInstaller.Packaging
+            Console.WriteLine(typeof(ProductManifest).Assembly.GetName().Name);
+            Console.WriteLine(typeof(CapabilityArtifact).Assembly.GetName().Name);
+            Console.WriteLine(typeof(SmokeProductManifest).Assembly.GetName().Name);
+            Console.WriteLine(typeof(PackageProductManifest).Assembly.GetName().Name);
+            _ = typeof(LocalInstallerProductManifest);
+            _ = typeof(LocalInstallerCliManifest);
+            _ = typeof(LocalInstallerServerManifest);
+            _ = typeof(LocalInstallerDesktopManifest);
+            _ = typeof(LocalInstallerTrayManifest);
             """);
 
         var restore = RunDotnet("restore", consumerDir);
@@ -244,6 +250,16 @@ public class LocalInstallerNuGetPackagingTests
         var build = RunDotnet("build --no-restore", consumerDir);
         Assert.That(build.ExitCode, Is.EqualTo(0),
             $"dotnet build failed — could not compile against the packed public API:\n{build.Output}");
+
+        var run = RunDotnet("run --no-build --no-restore", consumerDir);
+        Assert.That(run.ExitCode, Is.EqualTo(0),
+            $"dotnet run failed — package runtime graph is not self-contained:\n{run.Output}");
+        Assert.That(run.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries),
+            Does.Contain("LocalInstaller.Core")
+                .And.Contain("LocalInstaller.App")
+                .And.Contain("LocalInstaller.Smoke")
+                .And.Contain("LocalInstaller.Packaging"),
+            $"The consumer did not load every packed LocalInstaller assembly:\n{run.Output}");
     }
 
     // === helpers ===
