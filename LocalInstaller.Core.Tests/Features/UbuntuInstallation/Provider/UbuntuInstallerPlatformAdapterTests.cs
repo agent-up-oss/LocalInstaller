@@ -112,7 +112,7 @@ public class UbuntuInstallerPlatformAdapterTests
         await adapter.ExecuteInstallAsync(Session()).DrainAsync();
 
         var script = commands.CapturedScript;
-        Assert.That(script, Does.Not.Contain("10-environment.conf"));
+        Assert.That(script, Does.Not.Contain("mkdir -p '/etc/systemd/system/agent-up-server.service.d'"));
         Assert.That(script, Does.Not.Contain("[Service]"));
     }
 
