@@ -27,11 +27,22 @@ public sealed partial record UbuntuInstallerManifest(
 
     /// <summary>
     /// Extra systemd drop-in `Environment=` lines for <see cref="EnvironmentVariables"/>, empty when the
-    /// Server manifest declared none.
+    /// Server manifest declared none. Each assignment is quoted per systemd.exec(5) config quoting rules
+    /// so values containing spaces, quotes, or backslashes parse as a single assignment.
     /// </summary>
     public string EnvironmentOverrideConf()
         => string.Concat((EnvironmentVariables ?? new Dictionary<string, string>())
-            .Select(pair => $"Environment={pair.Key}={pair.Value}" + Environment.NewLine));
+            .Select(pair => $"Environment={SystemdAssignment(pair.Key, pair.Value)}" + Environment.NewLine));
+
+    private static string SystemdAssignment(string key, string value)
+    {
+        if (value.Any(c => c is '\n' or '\r' || char.IsControl(c)))
+            throw new ArgumentException(
+                $"Environment variable '{key}' value must not contain control characters.", nameof(value));
+
+        var escaped = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return $"\"{key}={escaped}\"";
+    }
 
     public string DesktopEntryText(string executablePath, string version)
     {

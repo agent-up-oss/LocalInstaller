@@ -69,7 +69,8 @@ public class UbuntuInstallerPlatformAdapterTests
         Assert.That(script, Does.Contain("cp -r '/payload/server'/."));
         Assert.That(script, Does.Contain("cp '/payload/agent-up-server.service' '/etc/systemd/system/agent-up-server.service'"));
         Assert.That(script, Does.Contain("systemctl daemon-reload"));
-        Assert.That(script, Does.Contain("systemctl enable --now 'agent-up-server.service'"));
+        Assert.That(script, Does.Contain("systemctl enable 'agent-up-server.service'"));
+        Assert.That(script, Does.Contain("systemctl restart 'agent-up-server.service'"));
 
         // CLI operations
         Assert.That(script, Does.Contain("rm -rf '/opt/agent-up/cli'"));
@@ -99,7 +100,7 @@ public class UbuntuInstallerPlatformAdapterTests
         var script = commands.CapturedScript;
         Assert.That(script, Does.Contain("mkdir -p '/etc/systemd/system/agent-up-server.service.d'"));
         Assert.That(script, Does.Contain("[Service]"));
-        Assert.That(script, Does.Contain("Environment=EXAMPLE_FLAG=true"));
+        Assert.That(script, Does.Contain("Environment=\"EXAMPLE_FLAG=true\""));
     }
 
     [Test]
@@ -167,7 +168,8 @@ public class UbuntuInstallerPlatformAdapterTests
         {
             // Server payload is installed
             Assert.That(script, Does.Contain("cp -r '/payload/server'/."));
-            Assert.That(script, Does.Contain("systemctl enable --now 'agent-up-server.service'"));
+            Assert.That(script, Does.Contain("systemctl enable 'agent-up-server.service'"));
+            Assert.That(script, Does.Contain("systemctl restart 'agent-up-server.service'"));
             // Tray payload is bundled with server
             Assert.That(script, Does.Contain("cp -r '/payload/tray'/."));
             Assert.That(script, Does.Contain("chmod +x '/opt/agent-up/tray/AgentUp.Tray'"));

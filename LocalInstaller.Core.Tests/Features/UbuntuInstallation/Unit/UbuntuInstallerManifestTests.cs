@@ -23,6 +23,64 @@ public class UbuntuInstallerManifestTests
     }
 
     [Test]
+    public void EnvironmentOverrideConf_isEmptyWhenNoVariablesDeclared()
+    {
+        var conf = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()).EnvironmentOverrideConf();
+
+        Assert.That(conf, Is.Empty);
+    }
+
+    [Test]
+    public void EnvironmentOverrideConf_quotesValuesContainingSpaces()
+    {
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_MESSAGE"] = "hello world" }
+        };
+
+        var conf = manifest.EnvironmentOverrideConf();
+
+        Assert.That(conf, Does.Contain("Environment=\"EXAMPLE_MESSAGE=hello world\""));
+    }
+
+    [Test]
+    public void EnvironmentOverrideConf_doublesEmbeddedBackslashes()
+    {
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_PATH"] = @"C:\tools" }
+        };
+
+        var conf = manifest.EnvironmentOverrideConf();
+
+        Assert.That(conf, Does.Contain(@"Environment=""EXAMPLE_PATH=C:\\tools"""));
+    }
+
+    [Test]
+    public void EnvironmentOverrideConf_escapesEmbeddedQuotes()
+    {
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_MESSAGE"] = "say \"hi\"" }
+        };
+
+        var conf = manifest.EnvironmentOverrideConf();
+
+        Assert.That(conf, Does.Contain(@"Environment=""EXAMPLE_MESSAGE=say \""hi\""""));
+    }
+
+    [Test]
+    public void EnvironmentOverrideConf_rejectsValuesContainingNewlines()
+    {
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_FLAG"] = "line1\nline2" }
+        };
+
+        Assert.That(() => manifest.EnvironmentOverrideConf(), Throws.ArgumentException);
+    }
+
+    [Test]
     public void DesktopEntryText_declaresStartupWmClassForUbuntuTaskbarIcon()
     {
         var text = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product())

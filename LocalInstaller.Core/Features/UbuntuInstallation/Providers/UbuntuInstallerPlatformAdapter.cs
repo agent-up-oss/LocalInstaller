@@ -12,6 +12,8 @@ namespace LocalInstaller.Core.Features.UbuntuInstallation.Providers;
 
 public sealed class UbuntuInstallerPlatformAdapter : IInstallerPlatformAdapter
 {
+    private const string EnvironmentDropInFileName = "10-environment.conf";
+
     private readonly ICommandRunner _commands;
     private readonly IUbuntuInstallerFileSystem _files;
     private readonly UbuntuInstallerOptions _options;
@@ -188,19 +190,24 @@ public sealed class UbuntuInstallerPlatformAdapter : IInstallerPlatformAdapter
             sb.AppendLine($"cp {Q(_options.Payload.ServiceFilePath)} {Q(_options.Paths.ServicePath)}");
 
             var dropInDirectory = $"{_options.Paths.ServicePath}.d";
-            sb.AppendLine($"rm -rf {Q(dropInDirectory)}");
+            var environmentDropIn = Path.Join(dropInDirectory, EnvironmentDropInFileName);
+            sb.AppendLine($"rm -f {Q(environmentDropIn)}");
             var environmentOverride = _options.Manifest.EnvironmentOverrideConf();
             if (!string.IsNullOrEmpty(environmentOverride))
             {
                 sb.AppendLine($"mkdir -p {Q(dropInDirectory)}");
-                sb.AppendLine($"cat > {Q(Path.Join(dropInDirectory, "10-environment.conf"))} << 'SERVICE_ENVIRONMENT'");
+                sb.AppendLine($"cat > {Q(environmentDropIn)} << 'SERVICE_ENVIRONMENT'");
                 sb.AppendLine("[Service]");
                 sb.Append(environmentOverride);
                 sb.AppendLine("SERVICE_ENVIRONMENT");
             }
 
             sb.AppendLine("systemctl daemon-reload");
-            sb.AppendLine($"systemctl enable --now {Q(_options.Manifest.ServiceUnitName)}");
+            sb.AppendLine($"systemctl enable {Q(_options.Manifest.ServiceUnitName)}");
+            // enable --now would not restart an already-active unit, so an upgrade's new
+            // drop-in environment would not take effect; restart always applies it and
+            // still starts a stopped unit.
+            sb.AppendLine($"systemctl restart {Q(_options.Manifest.ServiceUnitName)}");
         }
 
         if (summary.Includes(InstallerComponent.Tray))
@@ -246,7 +253,7 @@ public sealed class UbuntuInstallerPlatformAdapter : IInstallerPlatformAdapter
             case InstallerComponentTarget.Server:
                 sb.AppendLine($"systemctl disable --now {Q(_options.Manifest.ServiceUnitName)} 2>/dev/null || true");
                 sb.AppendLine($"rm -f {Q(_options.Paths.ServicePath)}");
-                sb.AppendLine($"rm -rf {Q($"{_options.Paths.ServicePath}.d")}");
+                sb.AppendLine($"rm -f {Q(Path.Join($"{_options.Paths.ServicePath}.d", EnvironmentDropInFileName))}");
                 sb.AppendLine("systemctl daemon-reload");
                 sb.AppendLine($"rm -rf {Q(_options.Paths.ServerDirectory)}");
                 sb.AppendLine($"rm -f {Q(_options.Paths.XdgAutostartPath)}");
