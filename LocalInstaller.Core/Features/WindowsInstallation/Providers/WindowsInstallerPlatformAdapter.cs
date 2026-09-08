@@ -194,6 +194,9 @@ public sealed class WindowsInstallerPlatformAdapter : IInstallerPlatformAdapter
         {
             await _requiredCommands.RunAsync("sc.exe", WindowsInstallerCommands.ServiceCreateArguments(manifest, _options.Paths), cancellationToken);
             await _requiredCommands.RunAsync("sc.exe", WindowsInstallerCommands.ServiceFailureArguments(manifest), cancellationToken);
+            var environmentPowerShell = WindowsInstallerCommands.ServiceEnvironmentPowerShell(manifest);
+            if (environmentPowerShell is not null)
+                await _requiredCommands.RunPowerShellAsync(environmentPowerShell, cancellationToken);
             await _requiredCommands.RunAsync("sc.exe", ["start", manifest.ServiceName], cancellationToken);
             yield return progress.Complete(InstallOperationKind.RegisterService);
         }

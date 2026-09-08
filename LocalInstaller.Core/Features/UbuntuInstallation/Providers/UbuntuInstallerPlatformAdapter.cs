@@ -186,6 +186,19 @@ public sealed class UbuntuInstallerPlatformAdapter : IInstallerPlatformAdapter
             sb.AppendLine($"cp -r {Q(_options.Payload.ServerDirectory)}/. {Q(_options.Paths.ServerDirectory)}");
             sb.AppendLine($"chmod +x {Q(_options.Paths.ServerExecutable)}");
             sb.AppendLine($"cp {Q(_options.Payload.ServiceFilePath)} {Q(_options.Paths.ServicePath)}");
+
+            var dropInDirectory = $"{_options.Paths.ServicePath}.d";
+            sb.AppendLine($"rm -rf {Q(dropInDirectory)}");
+            var environmentOverride = _options.Manifest.EnvironmentOverrideConf();
+            if (!string.IsNullOrEmpty(environmentOverride))
+            {
+                sb.AppendLine($"mkdir -p {Q(dropInDirectory)}");
+                sb.AppendLine($"cat > {Q(Path.Join(dropInDirectory, "10-environment.conf"))} << 'SERVICE_ENVIRONMENT'");
+                sb.AppendLine("[Service]");
+                sb.Append(environmentOverride);
+                sb.AppendLine("SERVICE_ENVIRONMENT");
+            }
+
             sb.AppendLine("systemctl daemon-reload");
             sb.AppendLine($"systemctl enable --now {Q(_options.Manifest.ServiceUnitName)}");
         }
@@ -233,6 +246,7 @@ public sealed class UbuntuInstallerPlatformAdapter : IInstallerPlatformAdapter
             case InstallerComponentTarget.Server:
                 sb.AppendLine($"systemctl disable --now {Q(_options.Manifest.ServiceUnitName)} 2>/dev/null || true");
                 sb.AppendLine($"rm -f {Q(_options.Paths.ServicePath)}");
+                sb.AppendLine($"rm -rf {Q($"{_options.Paths.ServicePath}.d")}");
                 sb.AppendLine("systemctl daemon-reload");
                 sb.AppendLine($"rm -rf {Q(_options.Paths.ServerDirectory)}");
                 sb.AppendLine($"rm -f {Q(_options.Paths.XdgAutostartPath)}");

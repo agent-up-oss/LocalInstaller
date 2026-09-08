@@ -15,7 +15,8 @@ public sealed partial record MacOsInstallerManifest(
     string ServerUrl,
     string DesktopExecutableName = "desktop",
     string InstallerExecutableName = "installer",
-    string ServerExecutableName = "server")
+    string ServerExecutableName = "server",
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
 {
     private static readonly Regex SafeSlug = new(@"^[a-z][a-z0-9-]+$", RegexOptions.Compiled);
     private static readonly Regex SafeName = new(@"^[A-Za-z][A-Za-z0-9 -]*$", RegexOptions.Compiled);
@@ -29,7 +30,8 @@ public sealed partial record MacOsInstallerManifest(
         return manifest with
         {
             DesktopExecutableName = ExecutableName(product, InstallerComponentTarget.Desktop, "desktop"),
-            ServerExecutableName = ExecutableName(product, InstallerComponentTarget.Server, "server")
+            ServerExecutableName = ExecutableName(product, InstallerComponentTarget.Server, "server"),
+            EnvironmentVariables = product.ServerEnvironmentVariables
         };
     }
 
@@ -130,7 +132,10 @@ public sealed class MacOsInstallerPlistGenerator
             new XElement("dict",
                 KeyString("ASPNETCORE_URLS", _manifest.ServerUrl),
                 KeyString("Storage__DataDirectory", $"/Library/Application Support/{_manifest.ProductName}"),
-                KeyString("DOTNET_BUNDLE_EXTRACT_BASE_DIR", $"/Library/Application Support/{_manifest.ProductName}/bundle-cache")),
+                KeyString("DOTNET_BUNDLE_EXTRACT_BASE_DIR", $"/Library/Application Support/{_manifest.ProductName}/bundle-cache"),
+                (_manifest.EnvironmentVariables ?? new Dictionary<string, string>())
+                    .SelectMany(pair => KeyString(pair.Key, pair.Value))
+                    .ToArray()),
             new XElement("key", "RunAtLoad"),
             new XElement("true"),
             new XElement("key", "KeepAlive"),

@@ -18,7 +18,8 @@ public sealed partial record WindowsInstallerManifest(
     string DesktopExecutableName = "desktop.exe",
     string ServerExecutableName = "server.exe",
     string CliExecutableName = "cli.exe",
-    string TrayExecutableName = "tray.exe")
+    string TrayExecutableName = "tray.exe",
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
 {
     private static readonly char[] WindowsInvalidFileNameChars = ['<', '>', '"', '|', '?', '*'];
     private static readonly string[] WindowsReservedDeviceNames =
@@ -72,7 +73,8 @@ public sealed partial record WindowsInstallerManifest(
             DesktopExecutableName: WindowsExecutableName(product, InstallerComponentTarget.Desktop, "desktop"),
             ServerExecutableName: WindowsExecutableName(product, InstallerComponentTarget.Server, "server"),
             CliExecutableName: WindowsExecutableName(product, InstallerComponentTarget.Cli, "cli"),
-            TrayExecutableName: WindowsExecutableName(product, InstallerComponentTarget.Tray, "tray"));
+            TrayExecutableName: WindowsExecutableName(product, InstallerComponentTarget.Tray, "tray"),
+            EnvironmentVariables: product.ServerEnvironmentVariables);
 
     private static string StableUpgradeCode(string slug)
     {

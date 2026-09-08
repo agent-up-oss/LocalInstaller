@@ -15,7 +15,8 @@ public static class LocalInstallerManifestComponentExtensions
             TargetFor(descriptor.Target),
             descriptor.ExecutableName,
             descriptor.PayloadDirectoryName,
-            descriptor.SourceProjectPath);
+            descriptor.SourceProjectPath,
+            descriptor.EnvironmentVariables);
 
     private static InstallerComponentTarget TargetFor(LocalInstallerArtifactTarget target)
         => target switch

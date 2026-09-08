@@ -10,7 +10,8 @@ public sealed partial record UbuntuInstallerManifest(
     string DesktopExecutableName,
     string ServerExecutableName,
     string CliExecutableName,
-    string TrayExecutableName)
+    string TrayExecutableName,
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
 {
     public static UbuntuInstallerManifest ForProduct(ProductManifest manifest)
         => new(
@@ -21,7 +22,16 @@ public sealed partial record UbuntuInstallerManifest(
             DesktopExecutableName: ExecutableName(manifest, InstallerComponentTarget.Desktop, "desktop"),
             ServerExecutableName: ExecutableName(manifest, InstallerComponentTarget.Server, "server"),
             CliExecutableName: ExecutableName(manifest, InstallerComponentTarget.Cli, "cli"),
-            TrayExecutableName: ExecutableName(manifest, InstallerComponentTarget.Tray, "tray"));
+            TrayExecutableName: ExecutableName(manifest, InstallerComponentTarget.Tray, "tray"),
+            EnvironmentVariables: manifest.ServerEnvironmentVariables);
+
+    /// <summary>
+    /// Extra systemd drop-in `Environment=` lines for <see cref="EnvironmentVariables"/>, empty when the
+    /// Server manifest declared none.
+    /// </summary>
+    public string EnvironmentOverrideConf()
+        => string.Concat((EnvironmentVariables ?? new Dictionary<string, string>())
+            .Select(pair => $"Environment={pair.Key}={pair.Value}" + Environment.NewLine));
 
     public string DesktopEntryText(string executablePath, string version)
     {

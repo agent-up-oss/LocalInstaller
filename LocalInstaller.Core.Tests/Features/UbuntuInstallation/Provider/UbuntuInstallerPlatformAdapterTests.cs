@@ -79,6 +79,42 @@ public class UbuntuInstallerPlatformAdapterTests
     }
 
     [Test]
+    public async Task ExecuteInstallAsync_writesSystemdDropInWhenManifestDeclaresServerEnvironmentVariables()
+    {
+        var commands = new ScriptCapturingCommandRunner();
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_FLAG"] = "true" }
+        };
+        var options = Options() with { Manifest = manifest };
+        var adapter = new UbuntuInstallerPlatformAdapter(
+            commands,
+            new RecordingUbuntuFileSystem(),
+            options,
+            new RequiredCommandRunner(commands),
+            new DockerPrerequisite(new DockerPrerequisiteProvider(commands), new Version(27, 0, 0)));
+
+        await adapter.ExecuteInstallAsync(Session()).DrainAsync();
+
+        var script = commands.CapturedScript;
+        Assert.That(script, Does.Contain("mkdir -p '/etc/systemd/system/agent-up-server.service.d'"));
+        Assert.That(script, Does.Contain("[Service]"));
+        Assert.That(script, Does.Contain("Environment=EXAMPLE_FLAG=true"));
+    }
+
+    [Test]
+    public async Task ExecuteInstallAsync_writesNoDropInWhenManifestDeclaresNoServerEnvironmentVariables()
+    {
+        var commands = new ScriptCapturingCommandRunner();
+        var adapter = Adapter(commands, new RecordingUbuntuFileSystem());
+
+        await adapter.ExecuteInstallAsync(Session()).DrainAsync();
+
+        var script = commands.CapturedScript;
+        Assert.That(script, Does.Not.Contain(".service.d"));
+    }
+
+    [Test]
     public async Task ValidateInstalledStateAsync_reportsSuccessFromUbuntuState()
     {
         var files = new RecordingUbuntuFileSystem();

@@ -20,6 +20,29 @@ public static class WindowsInstallerCommands
     public static IReadOnlyList<string> ServiceFailureArguments(WindowsInstallerManifest manifest)
         => ["failure", manifest.ServiceName, "reset=", "60", "actions=", "restart/5000/restart/5000/\"\"/5000"];
 
+    /// <summary>
+    /// PowerShell that writes the service's registry `Environment` value (the standard mechanism
+    /// Windows Services use for extra process environment variables), or null when the manifest
+    /// declares none. Must run after the service is created and before it is started.
+    /// </summary>
+    public static string? ServiceEnvironmentPowerShell(WindowsInstallerManifest manifest)
+    {
+        var variables = manifest.EnvironmentVariables;
+        if (variables is null || variables.Count == 0)
+            return null;
+
+        var entries = string.Join(
+            "," + Environment.NewLine,
+            variables.Select(pair => $"'{Ps($"{pair.Key}={pair.Value}")}'"));
+
+        return $$"""
+                 $servicePath = 'HKLM:\SYSTEM\CurrentControlSet\Services\{{Ps(manifest.ServiceName)}}'
+                 New-ItemProperty -Force -Path $servicePath -Name Environment -PropertyType MultiString -Value @(
+                 {{entries}}
+                 ) | Out-Null
+                 """;
+    }
+
     public static string PrepareExistingServicePowerShell(WindowsInstallerManifest manifest)
         => $$"""
              $serviceName = '{{Ps(manifest.ServiceName)}}'
