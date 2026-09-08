@@ -82,6 +82,17 @@ public class UbuntuInstallerManifestTests
     }
 
     [Test]
+    public void EnvironmentOverrideConf_rejectsKeysContainingNewlines()
+    {
+        var manifest = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product()) with
+        {
+            EnvironmentVariables = new Dictionary<string, string> { ["EXAMPLE_FLAG\nSERVICE_ENVIRONMENT"] = "true" }
+        };
+
+        Assert.That(() => manifest.EnvironmentOverrideConf(), Throws.ArgumentException);
+    }
+
+    [Test]
     public void DesktopEntryText_declaresStartupWmClassForUbuntuTaskbarIcon()
     {
         var text = UbuntuInstallerManifest.ForProduct(AgentUpTestManifests.Product())

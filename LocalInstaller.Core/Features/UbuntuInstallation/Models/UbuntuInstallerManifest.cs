@@ -36,12 +36,15 @@ public sealed partial record UbuntuInstallerManifest(
 
     private static string SystemdAssignment(string key, string value)
     {
+        if (string.IsNullOrEmpty(key) || key.Contains('=') || key.Any(c => c is '\n' or '\r' || char.IsControl(c)))
+            throw new ArgumentException($"Environment variable key '{key}' is invalid.", nameof(key));
+
         if (value.Any(c => c is '\n' or '\r' || char.IsControl(c)))
             throw new ArgumentException(
                 $"Environment variable '{key}' value must not contain control characters.", nameof(value));
 
-        var escaped = value.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        return $"\"{key}={escaped}\"";
+        var escaped = $"{key}={value}".Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return $"\"{escaped}\"";
     }
 
     public string DesktopEntryText(string executablePath, string version)
