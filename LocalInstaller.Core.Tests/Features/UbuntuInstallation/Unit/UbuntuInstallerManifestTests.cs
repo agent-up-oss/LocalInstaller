@@ -66,7 +66,8 @@ public class UbuntuInstallerManifestTests
 
         var conf = manifest.EnvironmentOverrideConf();
 
-        Assert.That(conf, Does.Contain(@"Environment=""EXAMPLE_MESSAGE=say \""hi\""""));
+        const string q = "\"";
+        Assert.That(conf, Does.Contain($"Environment={q}EXAMPLE_MESSAGE=say \\{q}hi\\{q}{q}"));
     }
 
     [Test]
