@@ -10,7 +10,8 @@ public sealed partial record UbuntuInstallerManifest(
     string DesktopExecutableName,
     string ServerExecutableName,
     string CliExecutableName,
-    string TrayExecutableName)
+    string TrayExecutableName,
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
 {
     public static UbuntuInstallerManifest ForProduct(ProductManifest manifest)
         => new(
@@ -21,7 +22,30 @@ public sealed partial record UbuntuInstallerManifest(
             DesktopExecutableName: ExecutableName(manifest, InstallerComponentTarget.Desktop, "desktop"),
             ServerExecutableName: ExecutableName(manifest, InstallerComponentTarget.Server, "server"),
             CliExecutableName: ExecutableName(manifest, InstallerComponentTarget.Cli, "cli"),
-            TrayExecutableName: ExecutableName(manifest, InstallerComponentTarget.Tray, "tray"));
+            TrayExecutableName: ExecutableName(manifest, InstallerComponentTarget.Tray, "tray"),
+            EnvironmentVariables: manifest.ServerEnvironmentVariables);
+
+    /// <summary>
+    /// Extra systemd drop-in `Environment=` lines for <see cref="EnvironmentVariables"/>, empty when the
+    /// Server manifest declared none. Each assignment is quoted per systemd.exec(5) config quoting rules
+    /// so values containing spaces, quotes, or backslashes parse as a single assignment.
+    /// </summary>
+    public string EnvironmentOverrideConf()
+        => string.Concat((EnvironmentVariables ?? new Dictionary<string, string>())
+            .Select(pair => $"Environment={SystemdAssignment(pair.Key, pair.Value)}" + Environment.NewLine));
+
+    private static string SystemdAssignment(string key, string value)
+    {
+        if (string.IsNullOrEmpty(key) || key.Contains('=') || key.Any(c => c is '\n' or '\r' || char.IsControl(c)))
+            throw new ArgumentException($"Environment variable key '{key}' is invalid.", nameof(key));
+
+        if (value.Any(c => c is '\n' or '\r' || char.IsControl(c)))
+            throw new ArgumentException(
+                $"Environment variable '{key}' value must not contain control characters.", nameof(value));
+
+        var escaped = $"{key}={value}".Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return $"\"{escaped}\"";
+    }
 
     public string DesktopEntryText(string executablePath, string version)
     {

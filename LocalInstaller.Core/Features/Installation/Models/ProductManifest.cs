@@ -33,4 +33,13 @@ public sealed partial record ProductManifest(
 
     public IReadOnlyList<ProductComponent> InstallableComponents
         => InstallerOptions.Count == 0 ? Components : InstallerOptions;
+
+    /// <summary>
+    /// Extra environment variables the Server component's manifest declared, applied when the platform
+    /// adapter registers the native service. Empty when the Server component declares none.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> ServerEnvironmentVariables
+        => InstallableComponents.FirstOrDefault(component => component.Target == InstallerComponentTarget.Server)
+               ?.EnvironmentVariables
+           ?? new Dictionary<string, string>();
 }

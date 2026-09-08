@@ -7,7 +7,8 @@ public sealed record ProductComponent(
     InstallerComponentTarget? Target = null,
     string? ExecutableName = null,
     string? PayloadDirectoryName = null,
-    string? SourceProjectPath = null)
+    string? SourceProjectPath = null,
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null)
 {
     public static ProductComponent Desktop
         => new("desktop", "Desktop", "Desktop application.", InstallerComponentTarget.Desktop, "desktop", "desktop");

@@ -16,7 +16,8 @@ public sealed record LocalInstallerArtifactDescriptor(
     string ExecutableName,
     string SourceProjectPath,
     string PayloadDirectoryName,
-    LocalInstallerArtifactTarget Target);
+    LocalInstallerArtifactTarget Target,
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null);
 
 public abstract class LocalInstallerProductManifest
 {
@@ -36,8 +37,16 @@ public abstract class LocalInstallerArtifactManifest
     public virtual string PayloadDirectoryName => Id;
     public abstract LocalInstallerArtifactTarget Target { get; }
 
+    /// <summary>
+    /// Extra environment variables the platform install/service registration should apply for this
+    /// artifact. Empty by default; a product manifest overrides this to declare variables it needs at
+    /// service-start time (for example, a product-specific opt-out flag for automated validation runs).
+    /// LocalInstaller has no opinion on the keys or values here.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, string> EnvironmentVariables => new Dictionary<string, string>();
+
     public LocalInstallerArtifactDescriptor ToDescriptor()
-        => new(Id, DisplayName, Description, ExecutableName, SourceProjectPath, PayloadDirectoryName, Target);
+        => new(Id, DisplayName, Description, ExecutableName, SourceProjectPath, PayloadDirectoryName, Target, EnvironmentVariables);
 }
 
 public abstract class LocalInstallerCliManifest : LocalInstallerArtifactManifest
